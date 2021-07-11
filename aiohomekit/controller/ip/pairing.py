@@ -42,11 +42,11 @@ from .connection import SecureHomeKitConnection
 logger = logging.getLogger(__name__)
 
 
+BATCH_SIZE = 15
 EMPTY_EVENT = {}
 
 
-def format_characteristic_list(data):
-    tmp = {}
+def format_characteristic_list(data, tmp = {}):
     for c in data["characteristics"]:
         key = (c["aid"], c["iid"])
         del c["aid"]
@@ -228,21 +228,27 @@ class IpPairing(AbstractPairing):
         if "accessories" not in self.pairing_data:
             await self.list_accessories_and_characteristics()
 
-        url = "/characteristics?id=" + ",".join(
-            str(x[0]) + "." + str(x[1]) for x in set(characteristics)
-        )
-        if include_meta:
-            url += "&meta=1"
-        if include_perms:
-            url += "&perms=1"
-        if include_type:
-            url += "&type=1"
-        if include_events:
-            url += "&ev=1"
+        count = len(characteristics)
+        limit = BATCH_SIZE
+        x = 0
+        tmp = {}
+        while x < count:
+            url = "/characteristics?id=" + ",".join(
+                str(x[0]) + "." + str(x[1]) for x in characteristics[x:x+limit]
+            )
+            if include_meta:
+                url += "&meta=1"
+            if include_perms:
+                url += "&perms=1"
+            if include_type:
+                url += "&type=1"
+            if include_events:
+                url += "&ev=1"
+            response = await self.connection.get_json(url)
+            tmp = format_characteristic_list(response, tmp)
+            x = x + limit
 
-        response = await self.connection.get_json(url)
-
-        return format_characteristic_list(response)
+        return tmp
 
     async def put_characteristics(self, characteristics):
         """
